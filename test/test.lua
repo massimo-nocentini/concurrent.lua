@@ -20,7 +20,7 @@ function T:test_yield ()
 end
 
 
-function T:rtest_nats_channel ()
+function T:test_nats_channel ()
     local C = concurrent.new ()
 
     local channel = C:channel ()

@@ -1,6 +1,11 @@
 
 local libconcurrent = require 'libconcurrentlua'
 
+local concurrent = {
+    
+    callcc = libconcurrent.callcc,
+}
+
 local trait = {
     co = {},
     channel = {},
@@ -15,11 +20,22 @@ local metatable = {
     }
 }
 
+function concurrent.new ()
+    local self = {
+        rdyQ = {}
+    }
+
+    setmetatable (self, metatable.co)
+
+    return self
+end
+
+
 local function dequeue (q) return table.remove (q, 1) end
 
 function trait.co:isempty () return #self.rdyQ == 0 end
 
-function trait.co:dispatch () coroutine.resume (dequeue (self.rdyQ)) end
+function trait.co:dispatch () return dequeue (self.rdyQ) () end
 
 function trait.co:yield ()
     if self:isempty () then
@@ -28,11 +44,13 @@ function trait.co:yield ()
 end
 
 function trait.co:spawn (f)
-    local co = coroutine.create (function ()        
+    local thread = concurrent.callcc (function (k1) 
+        concurrent.callcc (function (k2) return k1 (k2) end)
         pcall (f)
         self:dispatch ()
     end)
-    table.insert (self.rdyQ, co)
+
+    table.insert (self.rdyQ, thread)
 end
 
 function trait.co:channel ()
@@ -45,45 +63,25 @@ function trait.co:channel ()
     return channel
 end
 
+function trait.channel:send (v)
+    if #self.recvQ == 0 then table.insert (self.sendQ, v)
+    else
+        concurrent.callcc (function (k)
+            table.insert (self.co.rdyQ, k)
+            dequeue (self.recvQ) (v)
+        end)
+    end
+end
+
 function trait.channel:recv ()
     if #self.sendQ == 0 then
-        local co = coroutine.create (function (v) print ('***', v); self.co:dispatch () end)
-        table.insert (self.recvQ, co)
-        local flag, v = coroutine.resume (co)
-        print ('---', flag, v)
-        assert (flag, v)
-        return v
+        return concurrent.callcc (function (k)
+            table.insert (self.recvQ, k)
+            self.co:dispatch ()
+        end)
     else
         return dequeue (self.sendQ)
     end
 end
-
-function trait.channel:send (v)
-    if #self.recvQ == 0 then
-        table.insert (self.sendQ, v)
-    else
-        local co = coroutine.create (function ()
-            table.insert (self.co.rdyQ, co)
-            coroutine.resume (dequeue (self.recvQ), v)
-        end)
-        coroutine.resume (co)
-    end
-end
-
-local concurrent = {
-
-    new = function ()
-        local self = {
-            rdyQ = {}
-        }
-
-        setmetatable (self, metatable.co)
-
-        return self
-    end,
-
-    callcc = libconcurrent.callcc,
-}
-
 
 return concurrent
