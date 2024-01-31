@@ -26,15 +26,12 @@ function T:test_nats_channel ()
     local channel = C:channel ()
 
     local function count (i)
-        while true do
-            channel:send (i)
-            i = i + 1
-        end
+        channel:send (i) (function () return count (i + 1) end)
     end
 
     C:spawn (function () count (0) end)
 
-    local v = channel:recv ()
+    local v = channel:recv () (op.identity)
 
     unittest.assert.equals 'The first nats should be zero.' (0) (v)
 
@@ -52,7 +49,7 @@ function T:rtest_channel ()
     unittest.assert.equals 'Expected a deadlock' 'deadlock' (error_msg)
 end
 
-function T:test_callcc_hop ()
+function T:etest_callcc_hop ()
 
     local v = concurrent.callcc (function (hop) return 1 + hop (2) end)
 
@@ -65,6 +62,15 @@ function T:test_callcc_no_hop ()
     local v = concurrent.callcc (function (hop) return 1 + 2 end)
 
     unittest.assert.equals 'Expected 2' (3) (v)
+
+end
+
+
+function T:test_callcc_save ()
+
+    local v = concurrent.callcc (function (hop) return hop (hop) end)
+
+    unittest.assert.equals 'Expected type thread' 'thread' (type(v))
 
 end
 

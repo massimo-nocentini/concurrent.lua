@@ -1,7 +1,7 @@
 
 
 linux:
-	gcc -O3 -g -fPIC -Wall -shared -o libconcurrentlua.so libconcurrentlua.c -llua -lgb
+	gcc -O3 -g -fPIC -Wall -shared -o libconcurrentlua.so libconcurrentlua.c -llua
 
 install:
 	mkdir -p /usr/local/lib/lua/5.4/	# just for ensuring that the dest dir exists

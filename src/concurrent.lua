@@ -1,9 +1,9 @@
 
 local libconcurrent = require 'libconcurrentlua'
+local op = require 'operator'
 
-local concurrent = {
-    
-    callcc = libconcurrent.callcc,
+local concurrent = {    
+    callcc = op.callcc,
 }
 
 local trait = {
@@ -44,13 +44,15 @@ function trait.co:yield ()
 end
 
 function trait.co:spawn (f)
-    local thread = concurrent.callcc (function (k1) 
+    concurrent.callcc (function (k1) 
         concurrent.callcc (function (k2) return k1 (k2) end)
+        (function ()
         pcall (f)
-        self:dispatch ()
+        self:dispatch () end)
     end)
+    (function (thread) table.insert (self.rdyQ, thread) end)
 
-    table.insert (self.rdyQ, thread)
+    
 end
 
 function trait.co:channel ()
@@ -64,13 +66,13 @@ function trait.co:channel ()
 end
 
 function trait.channel:send (v)
-    if #self.recvQ == 0 then table.insert (self.sendQ, v)
-    else
-        concurrent.callcc (function (k)
-            table.insert (self.co.rdyQ, k)
-            dequeue (self.recvQ) (v)
-        end)
-    end
+    return concurrent.callcc (function (k)
+        table.insert (self.co.rdyQ, k)
+        if #self.recvQ == 0 then            
+            table.insert (self.sendQ, v)
+            self.co:dispatch ()
+        else dequeue (self.recvQ) (v) end
+    end)    
 end
 
 function trait.channel:recv ()
@@ -80,7 +82,7 @@ function trait.channel:recv ()
             self.co:dispatch ()
         end)
     else
-        return dequeue (self.sendQ)
+        return function (cont) return cont (dequeue (self.sendQ)) end
     end
 end
 
